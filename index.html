@@ -81,6 +81,26 @@
       Green Screen: OFF
     </button>
 
+    <p>Videon koko:</p>
+<input
+  id="sizeSlider"
+  type="range"
+  min="0.25"
+  max="3"
+  step="0.05"
+  value="1"
+>
+
+<p>Videon korkeus:</p>
+<input
+  id="heightSlider"
+  type="range"
+  min="-1"
+  max="2"
+  step="0.05"
+  value="0"
+>
+
     <p>Etsi tasainen pinta ja napauta näyttöä sijoittaaksesi videon.</p>
 
     <div id="status">Valmis käynnistämään AR:n.</div>
@@ -96,6 +116,12 @@
     const videoUrlInput = document.getElementById("videoUrl");
     const loadVideoButton = document.getElementById("loadVideo");
     const greenScreenButton = document.getElementById("greenScreenButton");
+
+    const sizeSlider = document.getElementById("sizeSlider");
+const heightSlider = document.getElementById("heightSlider");
+
+let currentSize = 1;
+let currentHeight = 0;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
@@ -119,6 +145,22 @@
     let greenScreenEnabled = false;
 
     const videoObjects = [];
+
+    sizeSlider.addEventListener("input", () => {
+  currentSize = Number(sizeSlider.value);
+
+  videoObjects.forEach((object) => {
+    object.scale.setScalar(currentSize);
+  });
+});
+
+heightSlider.addEventListener("input", () => {
+  currentHeight = Number(heightSlider.value);
+
+  videoObjects.forEach((object) => {
+    object.position.y = object.userData.baseY + currentHeight;
+  });
+});
 
     // Ladataan video.
     loadVideoButton.addEventListener("click", () => {
@@ -306,9 +348,14 @@
         videoMaterial
       );
 
-      placedVideo.position.setFromMatrixPosition(reticle.matrix);
-      placedVideo.quaternion.setFromRotationMatrix(reticle.matrix);
-      placedVideo.rotateX(-Math.PI / 2);
+placedVideo.position.setFromMatrixPosition(reticle.matrix);
+placedVideo.quaternion.setFromRotationMatrix(reticle.matrix);
+placedVideo.rotateX(-Math.PI / 2);
+
+placedVideo.userData.baseY = placedVideo.position.y;
+placedVideo.position.y += currentHeight;
+
+placedVideo.scale.setScalar(currentSize);
 
       scene.add(placedVideo);
       videoObjects.push(placedVideo);
