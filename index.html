@@ -81,6 +81,14 @@
       Green Screen: OFF
     </button>
 
+    <button id="newPlacementButton" disabled>
+  Uusi sijoitus
+</button>
+
+<button id="removeVideosButton" disabled>
+  Poista videot
+</button>
+
     <p>Videon koko:</p>
 <input
   id="sizeSlider"
@@ -137,6 +145,14 @@
     const loadVideoButton = document.getElementById("loadVideo");
     const greenScreenButton = document.getElementById("greenScreenButton");
 
+    const newPlacementButton =
+  document.getElementById("newPlacementButton");
+
+const removeVideosButton =
+  document.getElementById("removeVideosButton");
+
+let placementMode = false;
+
     const sizeSlider = document.getElementById("sizeSlider");
 const heightSlider = document.getElementById("heightSlider");
 
@@ -171,6 +187,29 @@ let currentRotation = 0;
     let greenScreenEnabled = false;
 
     const videoObjects = [];
+
+    newPlacementButton.addEventListener("click", () => {
+  if (!videoGeometry || !videoMaterial) {
+    status.textContent = "Lataa ensin video.";
+    return;
+  }
+
+  placementMode = true;
+  status.textContent =
+    "Uusi sijoitus valittu. Tähtää uuteen paikkaan ja napauta näyttöä.";
+});
+
+removeVideosButton.addEventListener("click", () => {
+  videoObjects.forEach((object) => {
+    scene.remove(object);
+    object.geometry.dispose();
+  });
+
+  videoObjects.length = 0;
+  placementMode = false;
+
+  status.textContent = "Kaikki sijoitetut videot poistettu.";
+});
 
     sizeSlider.addEventListener("input", () => {
   currentSize = Number(sizeSlider.value);
@@ -334,6 +373,8 @@ rotationSlider.addEventListener("input", () => {
           videoMaterial.uniforms.keyEnabled.value = 0.0;
 
           greenScreenButton.disabled = false;
+          newPlacementButton.disabled = false;
+          removeVideosButton.disabled = false;
           greenScreenButton.textContent = "Green Screen: OFF";
           greenScreenButton.classList.remove("active");
 
@@ -390,8 +431,14 @@ rotationSlider.addEventListener("input", () => {
 
     const controller = renderer.xr.getController(0);
 
-    controller.addEventListener("select", () => {
-      if (!reticle.visible) return;
+controller.addEventListener("select", () => {
+  if (!reticle.visible) return;
+
+  if (videoObjects.length > 0 && !placementMode) {
+    status.textContent =
+      "Paina ensin Uusi sijoitus -painiketta.";
+    return;
+  }
 
       if (!videoGeometry || !videoMaterial) {
         status.textContent = "Lataa ensin video ennen sijoittamista.";
@@ -429,9 +476,14 @@ const initialRotation = new THREE.Quaternion()
 placedVideo.quaternion.premultiply(initialRotation);
 
       scene.add(placedVideo);
-      videoObjects.push(placedVideo);
+videoObjects.push(placedVideo);
 
-      status.textContent = "Video sijoitettu onnistuneesti!";
+placementMode = false;
+
+newPlacementButton.disabled = false;
+removeVideosButton.disabled = false;
+
+status.textContent = "Video sijoitettu onnistuneesti!";
     });
 
     scene.add(controller);
