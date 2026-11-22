@@ -41,6 +41,22 @@
       font-size: 16px;
     }
 
+    button {
+      border: 0;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    #greenScreenButton {
+      background: #555;
+      color: white;
+      font-weight: bold;
+    }
+
+    #greenScreenButton.active {
+      background: #168b45;
+    }
+
     #status {
       margin-top: 8px;
     }
@@ -61,6 +77,10 @@
 
     <button id="loadVideo">Lataa video</button>
 
+    <button id="greenScreenButton" disabled>
+      Green Screen: OFF
+    </button>
+
     <p>Etsi tasainen pinta ja napauta näyttöä sijoittaaksesi videon.</p>
 
     <div id="status">Valmis käynnistämään AR:n.</div>
@@ -75,6 +95,7 @@
     const status = document.getElementById("status");
     const videoUrlInput = document.getElementById("videoUrl");
     const loadVideoButton = document.getElementById("loadVideo");
+    const greenScreenButton = document.getElementById("greenScreenButton");
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
@@ -95,9 +116,11 @@
     let videoTexture = null;
     let videoMaterial = null;
     let videoGeometry = null;
+    let greenScreenEnabled = false;
 
     const videoObjects = [];
 
+    // Ladataan video.
     loadVideoButton.addEventListener("click", () => {
       const url = videoUrlInput.value.trim();
 
@@ -110,7 +133,8 @@
         const parsedUrl = new URL(url);
 
         if (parsedUrl.protocol !== "https:") {
-          status.textContent = "Videon osoitteen täytyy käyttää HTTPS-yhteyttä.";
+          status.textContent =
+            "Videon osoitteen täytyy käyttää HTTPS-yhteyttä.";
           return;
         }
       } catch {
@@ -143,8 +167,62 @@
           videoTexture = new THREE.VideoTexture(video);
           videoTexture.colorSpace = THREE.SRGBColorSpace;
 
-          videoMaterial = new THREE.MeshBasicMaterial({
-            map: videoTexture,
+          // Green Screen -materiaali.
+          videoMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+              map: { value: videoTexture },
+              keyEnabled: { value: 0.0 },
+              threshold: { value: 0.18 },
+              softness: { value: 0.12 }
+            },
+
+            vertexShader: `
+              varying vec2 vUv;
+
+              void main() {
+                vUv = uv;
+                gl_Position =
+                  projectionMatrix *
+                  modelViewMatrix *
+                  vec4(position, 1.0);
+              }
+            `,
+
+            fragmentShader: `
+              uniform sampler2D map;
+              uniform float keyEnabled;
+              uniform float threshold;
+              uniform float softness;
+
+              varying vec2 vUv;
+
+              void main() {
+                vec4 color = texture2D(map, vUv);
+
+                float greenDominance =
+                  color.g - max(color.r, color.b);
+
+                float keyedAlpha =
+                  1.0 - smoothstep(
+                    threshold,
+                    threshold + softness,
+                    greenDominance
+                  );
+
+                float finalAlpha =
+                  mix(1.0, keyedAlpha, keyEnabled);
+
+                gl_FragColor =
+                  vec4(color.rgb, color.a * finalAlpha);
+
+                if (gl_FragColor.a < 0.01) {
+                  discard;
+                }
+              }
+            `,
+
+            transparent: true,
+            depthWrite: false,
             side: THREE.DoubleSide
           });
 
@@ -154,21 +232,50 @@
 
           videoGeometry = new THREE.PlaneGeometry(width, height);
 
+          // Uusi video alkaa aina Green Screen OFF -tilassa.
+          greenScreenEnabled = false;
+          videoMaterial.uniforms.keyEnabled.value = 0.0;
+
+          greenScreenButton.disabled = false;
+          greenScreenButton.textContent = "Green Screen: OFF";
+          greenScreenButton.classList.remove("active");
+
           status.textContent =
-            "Video ladattu. Käynnistä AR ja sijoita video napauttamalla.";
+            "Video ladattu! Voit valita Green Screen -tilan.";
 
         } catch (error) {
-          status.textContent = "Videon käynnistys epäonnistui: " + error.message;
+          status.textContent =
+            "Videon käynnistys epäonnistui: " + error.message;
         }
       }, { once: true });
 
       video.addEventListener("error", () => {
         status.textContent =
-          "Videon lataaminen epäonnistui. Tarkista, että osoite on suora MP4-linkki.";
+          "Videon lataaminen epäonnistui. Tarkista suora MP4-linkki.";
       }, { once: true });
 
       video.load();
       status.textContent = "Ladataan videota...";
+    });
+
+    // Green Screen ON/OFF -kytkin.
+    greenScreenButton.addEventListener("click", () => {
+      if (!videoMaterial) return;
+
+      greenScreenEnabled = !greenScreenEnabled;
+
+      videoMaterial.uniforms.keyEnabled.value =
+        greenScreenEnabled ? 1.0 : 0.0;
+
+      if (greenScreenEnabled) {
+        greenScreenButton.textContent = "Green Screen: ON";
+        greenScreenButton.classList.add("active");
+        status.textContent = "Vihreän taustan poisto on käytössä.";
+      } else {
+        greenScreenButton.textContent = "Green Screen: OFF";
+        greenScreenButton.classList.remove("active");
+        status.textContent = "Alkuperäinen videokuva käytössä.";
+      }
     });
 
     const reticle = new THREE.Mesh(
@@ -201,8 +308,6 @@
 
       placedVideo.position.setFromMatrixPosition(reticle.matrix);
       placedVideo.quaternion.setFromRotationMatrix(reticle.matrix);
-
-      // Käännetään videopinta pystyasentoon.
       placedVideo.rotateX(-Math.PI / 2);
 
       scene.add(placedVideo);
