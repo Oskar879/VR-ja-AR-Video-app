@@ -4,14 +4,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AR Video App - AR testi</title>
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
+  <title>AR Video App</title>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
+    }
   }
-}
-</script>
+  </script>
+
   <style>
     body {
       margin: 0;
@@ -31,28 +33,50 @@
       border-radius: 8px;
     }
 
-    button {
+    input, button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
       font-size: 16px;
+    }
+
+    #status {
+      margin-top: 8px;
     }
   </style>
 </head>
+
 <body>
   <div id="info">
-    <strong>AR Video App – pintatesti</strong>
-    <p>Etsi tasainen pinta ja tähtää siihen. Napauta näyttöä sijoittaaksesi kuution.</p>
+    <strong>AR Video App – videotesti</strong>
+
+    <p>Liitä suoran MP4-videon osoite:</p>
+
+    <input
+      id="videoUrl"
+      type="url"
+      placeholder="https://esimerkki.fi/video.mp4"
+    >
+
+    <button id="loadVideo">Lataa video</button>
+
+    <p>Etsi tasainen pinta ja napauta näyttöä sijoittaaksesi videon.</p>
+
     <div id="status">Valmis käynnistämään AR:n.</div>
   </div>
 
   <script type="module">
-import * as THREE from "three";
+    import * as THREE from "three";
 
-import { ARButton } from
-  "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/webxr/ARButton.js";
+    import { ARButton } from
+      "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/webxr/ARButton.js";
 
     const status = document.getElementById("status");
+    const videoUrlInput = document.getElementById("videoUrl");
+    const loadVideoButton = document.getElementById("loadVideo");
 
     const scene = new THREE.Scene();
-
     const camera = new THREE.PerspectiveCamera();
 
     const renderer = new THREE.WebGLRenderer({
@@ -67,12 +91,85 @@ import { ARButton } from
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 2));
 
-    const cube = new THREE.Mesh(
-      new THREE.BoxGeometry(0.15, 0.15, 0.15),
-      new THREE.MeshStandardMaterial({
-        color: 0x35dd65
-      })
-    );
+    let video = null;
+    let videoTexture = null;
+    let videoMaterial = null;
+    let videoGeometry = null;
+
+    const videoObjects = [];
+
+    loadVideoButton.addEventListener("click", () => {
+      const url = videoUrlInput.value.trim();
+
+      if (!url) {
+        status.textContent = "Anna ensin videon osoite.";
+        return;
+      }
+
+      try {
+        const parsedUrl = new URL(url);
+
+        if (parsedUrl.protocol !== "https:") {
+          status.textContent = "Videon osoitteen täytyy käyttää HTTPS-yhteyttä.";
+          return;
+        }
+      } catch {
+        status.textContent = "Tarkista videon osoite.";
+        return;
+      }
+
+      if (video) {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      }
+
+      video = document.createElement("video");
+      video.src = url;
+      video.crossOrigin = "anonymous";
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "auto";
+
+      video.addEventListener("canplay", async () => {
+        try {
+          await video.play();
+
+          if (videoTexture) videoTexture.dispose();
+          if (videoMaterial) videoMaterial.dispose();
+          if (videoGeometry) videoGeometry.dispose();
+
+          videoTexture = new THREE.VideoTexture(video);
+          videoTexture.colorSpace = THREE.SRGBColorSpace;
+
+          videoMaterial = new THREE.MeshBasicMaterial({
+            map: videoTexture,
+            side: THREE.DoubleSide
+          });
+
+          const aspect = video.videoWidth / video.videoHeight;
+          const height = 0.8;
+          const width = height * aspect;
+
+          videoGeometry = new THREE.PlaneGeometry(width, height);
+
+          status.textContent =
+            "Video ladattu. Käynnistä AR ja sijoita video napauttamalla.";
+
+        } catch (error) {
+          status.textContent = "Videon käynnistys epäonnistui: " + error.message;
+        }
+      }, { once: true });
+
+      video.addEventListener("error", () => {
+        status.textContent =
+          "Videon lataaminen epäonnistui. Tarkista, että osoite on suora MP4-linkki.";
+      }, { once: true });
+
+      video.load();
+      status.textContent = "Ladataan videota...";
+    });
 
     const reticle = new THREE.Mesh(
       new THREE.RingGeometry(0.08, 0.10, 32),
@@ -92,12 +189,26 @@ import { ARButton } from
     controller.addEventListener("select", () => {
       if (!reticle.visible) return;
 
-      const placedCube = cube.clone();
-      placedCube.position.setFromMatrixPosition(reticle.matrix);
-      placedCube.quaternion.setFromRotationMatrix(reticle.matrix);
+      if (!videoGeometry || !videoMaterial) {
+        status.textContent = "Lataa ensin video ennen sijoittamista.";
+        return;
+      }
 
-      scene.add(placedCube);
-      status.textContent = "Kuution sijoitus onnistui!";
+      const placedVideo = new THREE.Mesh(
+        videoGeometry,
+        videoMaterial
+      );
+
+      placedVideo.position.setFromMatrixPosition(reticle.matrix);
+      placedVideo.quaternion.setFromRotationMatrix(reticle.matrix);
+
+      // Käännetään videopinta pystyasentoon.
+      placedVideo.rotateX(-Math.PI / 2);
+
+      scene.add(placedVideo);
+      videoObjects.push(placedVideo);
+
+      status.textContent = "Video sijoitettu onnistuneesti!";
     });
 
     scene.add(controller);
