@@ -77,6 +77,16 @@
 
     <button id="loadVideo">Lataa video</button>
 
+    <input
+  id="websiteUrl"
+  type="url"
+  placeholder="Liitä videosivuston osoite"
+>
+
+<button id="detectWebsiteButton">
+  Tunnista videosivusto
+</button>
+
     <button id="greenScreenButton" disabled>
       Green Screen: OFF
     </button>
@@ -141,6 +151,57 @@
       "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/webxr/ARButton.js";
 
     const status = document.getElementById("status");
+
+    const websiteUrl = document.getElementById("websiteUrl");
+
+const detectWebsiteButton =
+  document.getElementById("detectWebsiteButton");
+
+detectWebsiteButton.addEventListener("click", async () => {
+  const url = websiteUrl.value.trim();
+
+  if (!url) {
+    status.textContent = "Liitä ensin videosivuston osoite.";
+    return;
+  }
+
+  status.textContent = "Tunnistetaan videosivustoa...";
+
+  try {
+    const response = await fetch(
+      "http://localhost:3000/detect-video",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ url })
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Tunnistus epäonnistui.");
+    }
+
+    if (result.type === "embed") {
+      status.textContent =
+        "Tunnistettu palveluntarjoaja: " +
+        result.provider +
+        ". Otsikko: " +
+        (result.title || result.videoId || "Video");
+    } else {
+      status.textContent =
+        result.message || "Videolähde tunnistettu.";
+    }
+
+  } catch (error) {
+    status.textContent =
+      "Yhteysvirhe: " + error.message;
+  }
+});
+    
     const videoUrlInput = document.getElementById("videoUrl");
     const loadVideoButton = document.getElementById("loadVideo");
     const greenScreenButton = document.getElementById("greenScreenButton");
