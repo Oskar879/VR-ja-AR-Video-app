@@ -101,6 +101,26 @@
   value="0"
 >
 
+    <p>Videon etäisyys:</p>
+<input
+  id="distanceSlider"
+  type="range"
+  min="-2"
+  max="2"
+  step="0.05"
+  value="0"
+>
+
+<p>Videon suunta:</p>
+<input
+  id="rotationSlider"
+  type="range"
+  min="-180"
+  max="180"
+  step="5"
+  value="0"
+>
+
     <p>Etsi tasainen pinta ja napauta näyttöä sijoittaaksesi videon.</p>
 
     <div id="status">Valmis käynnistämään AR:n.</div>
@@ -122,6 +142,12 @@ const heightSlider = document.getElementById("heightSlider");
 
 let currentSize = 1;
 let currentHeight = 0;
+
+    const distanceSlider = document.getElementById("distanceSlider");
+const rotationSlider = document.getElementById("rotationSlider");
+
+let currentDistance = 0;
+let currentRotation = 0;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
@@ -159,6 +185,35 @@ heightSlider.addEventListener("input", () => {
 
   videoObjects.forEach((object) => {
     object.position.y = object.userData.baseY + currentHeight;
+  });
+});
+
+    distanceSlider.addEventListener("input", () => {
+  currentDistance = Number(distanceSlider.value);
+
+  videoObjects.forEach((object) => {
+    object.position.z =
+      object.userData.baseZ + currentDistance;
+  });
+});
+
+rotationSlider.addEventListener("input", () => {
+  currentRotation = THREE.MathUtils.degToRad(
+    Number(rotationSlider.value)
+  );
+
+  videoObjects.forEach((object) => {
+    const rotation = new THREE.Quaternion()
+      .setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        currentRotation
+      );
+
+    object.quaternion.copy(
+      object.userData.baseQuaternion
+    );
+
+    object.quaternion.premultiply(rotation);
   });
 });
 
@@ -353,9 +408,25 @@ placedVideo.quaternion.setFromRotationMatrix(reticle.matrix);
 placedVideo.rotateX(-Math.PI / 2);
 
 placedVideo.userData.baseY = placedVideo.position.y;
+placedVideo.userData.baseZ = placedVideo.position.z;
+
+placedVideo.userData.baseQuaternion =
+  placedVideo.quaternion.clone();
+
 placedVideo.position.y += currentHeight;
+placedVideo.position.z += currentDistance;
 
 placedVideo.scale.setScalar(currentSize);
+
+const initialRotation = new THREE.Quaternion()
+  .setFromAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    THREE.MathUtils.degToRad(
+      Number(rotationSlider.value)
+    )
+  );
+
+placedVideo.quaternion.premultiply(initialRotation);
 
       scene.add(placedVideo);
       videoObjects.push(placedVideo);
